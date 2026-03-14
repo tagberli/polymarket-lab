@@ -22,6 +22,24 @@ IMPORTANT_MARKET_COLS = ["id", "question", "outcomePrices", "spread", "volume", 
 def clean_up(markets: pd.DataFrame) -> pd.DataFrame:
     return markets.filter(items=IMPORTANT_MARKET_COLS) 
 
+def orderbook_imbalance(book, depth=5) -> pd.DataFrame:
+    bids = book.bids
+    asks = book.asks
+
+    bid_volume = sum(float(bid.size) for bid in bids)
+    ask_volume = sum(float(ask.size) for ask in asks)
+    total_volume = bid_volume + ask_volume
+
+    # calculate the imbalance to use as a signal in future
+    imbalance = None if total_volume == 0 else (bid_volume - ask_volume) / total_volume
+    return {
+        "bid_volume": bid_volume,
+        "ask_volume": ask_volume,
+        "imbalance": imbalance
+    }
+
+
+
 markets = pd.json_normalize(response.json())
 clean_markets = clean_up(markets)
 
@@ -54,20 +72,13 @@ for _, row in markets.iterrows():
     for token_id in token_ids:
         try: # using try just in case some data doesnt exist
             book = client.get_order_book(token_id)
-            bids = book.bids
-            asks = book.asks
-            bid_volume = float(bids[0].size) if bids else None
-            ask_volume = float(asks[0].size) if asks else None
-
-            # calculate the imbalance to use as a signal in future
-            imbalance = None
-            if bid_volume is not None and ask_volume is not None:
-                imbalance = (bid_volume - ask_volume) / (bid_volume + ask_volume)
-             
-            print("Token Id:", token_id)
-            print("Bid Volume:", bid_volume)
-            print("Ask Volume:", ask_volume)
-            print("Imbalance:", imbalance)
+            
+            stats = orderbook_imbalance(book)
+            
+            print("Token ID:", token_id)
+            for k, v in stats.items():
+                print(f"{k}: {v}")
+            print("-----\n")
             
         except Exception as e:
             print("Error:", e)
